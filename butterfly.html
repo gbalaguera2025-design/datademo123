@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>🦋 Butterfly Glide</title>
+  <style>
+    :root{--sky1:#cfe9ff;--sky2:#eaf7ff;--ink:#0f172a;--card:#ffffff}
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji"}
+    body{display:grid;place-items:center;background:linear-gradient(180deg,var(--sky1),var(--sky2))}
+
+    #game{position:relative;width:min(720px,95vw);height:420px;border-radius:18px;overflow:hidden;box-shadow:0 12px 30px rgba(0,0,0,.18);background:linear-gradient(180deg,#bce0ff 60%, #b6f3d8 0)}
+
+    /* scenery */
+    .decor{position:absolute;inset:0;pointer-events:none}
+    .decor span{position:absolute;opacity:.7;font-size:32px}
+
+    /* player */
+    .butterfly{position:absolute;left:68px;bottom:50%;font-size:44px;line-height:1;filter:drop-shadow(0 6px 6px rgba(0,0,0,.2))}
+    .butterfly.flap{animation:flap .25s ease}
+    @keyframes flap{0%{transform:translateY(0) rotate(-6deg)}50%{transform:translateY(-12px) rotate(0)}100%{transform:translateY(0) rotate(-6deg)}}
+
+    /* obstacles */
+    .ob{position:absolute;bottom:40px;right:-80px;font-size:44px;line-height:1;filter:drop-shadow(0 6px 6px rgba(0,0,0,.15))}
+
+    /* hud */
+    .hud{position:absolute;left:12px;right:12px;top:10px;display:flex;justify-content:space-between;color:var(--ink);font-weight:800}
+    .badge{background:var(--card);padding:6px 10px;border-radius:999px;box-shadow:0 6px 16px rgba(0,0,0,.08)}
+
+    /* overlays */
+    .overlay{position:absolute;inset:0;display:grid;place-items:center;background:rgba(255,255,255,.7);backdrop-filter:saturate(140%) blur(4px);text-align:center;color:#111}
+    .overlay.hidden{display:none}
+    .card{background:var(--card);padding:18px 22px;border-radius:16px;box-shadow:0 12px 30px rgba(0,0,0,.15)}
+    .kbd{display:inline-block;border:1px solid #d1d5db;border-bottom-width:3px;border-radius:10px;padding:2px 8px;font-weight:800;background:#f9fafb}
+
+    .controls{position:absolute;right:12px;bottom:12px;display:flex;gap:8px}
+    button{border:0;background:var(--card);border-radius:999px;padding:10px 14px;font-weight:800;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.12)}
+    button:hover{transform:translateY(-1px)}
+  </style>
+</head>
+<body>
+  <div id="game" role="application" aria-label="Butterfly game">
+    <div class="decor" aria-hidden="true">
+      <span style="left:8%;bottom:330px">☁️</span>
+      <span style="left:26%;bottom:340px">☁️</span>
+      <span style="left:70%;bottom:335px">☁️</span>
+      <span style="left:18%;bottom:70px">🌸</span>
+      <span style="left:46%;bottom:120px">🌼</span>
+      <span style="left:82%;bottom:80px">🌻</span>
+    </div>
+
+    <div class="butterfly" id="bf">🦋</div>
+
+    <div class="hud">
+      <div class="badge" id="score">Score: 0</div>
+      <div class="badge" id="best">Best: 0</div>
+      <div class="badge" id="speed">Wind: 1x</div>
+    </div>
+
+    <div class="overlay" id="overlay-start">
+      <div class="card">
+        <div style="font-size:40px">🦋 + 🐦 🕸️ ☁️ = 🏆</div>
+        <h3>Glide past obstacles!</h3>
+        <p>Press <span class="kbd">Space</span> / <span class="kbd">↑</span> or tap to flap.</p>
+      </div>
+    </div>
+
+    <div class="overlay hidden" id="overlay-over">
+      <div class="card">
+        <div style="font-size:40px">💥🦋</div>
+        <h3>Game Over</h3>
+        <p>Score: <b id="finalScore">0</b></p>
+        <p>Press <span class="kbd">R</span> or click Restart.</p>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button id="btnStart">▶️ Start</button>
+      <button id="btnRestart">🔁 Restart</button>
+    </div>
+  </div>
+
+  <script>
+    // ====== Simple flap-to-fly engine ======
+    const game = document.getElementById('game');
+    const bf = document.getElementById('bf');
+    const scoreEl = document.getElementById('score');
+    const bestEl = document.getElementById('best');
+    const speedEl = document.getElementById('speed');
+    const startOverlay = document.getElementById('overlay-start');
+    const overOverlay = document.getElementById('overlay-over');
+    const finalScoreEl = document.getElementById('finalScore');
+    const btnStart = document.getElementById('btnStart');
+    const btnRestart = document.getElementById('btnRestart');
+
+    let running=false, rafId=null, last=0;
+    let vy=0, y=180; // vertical position in px from bottom
+    const gravity = 0.6;
+    const flapV = 9.5;
+
+    let speed = 4.6;  // wind speed (world moves)
+    let meters = 0;
+    let best = +localStorage.getItem('butterfly-best') || 0;
+    bestEl.textContent = `Best: ${best}`;
+
+    const obstacles = new Set();
+    const obEmojis = ['🐦','🕸️','🌫️'];
+
+    function rand(min,max){return Math.random()*(max-min)+min}
+
+    function spawnObstacle(){
+      const ob = document.createElement('div');
+      ob.className='ob';
+      ob.textContent = obEmojis[Math.floor(Math.random()*obEmojis.length)];
+      const h = Math.floor(rand(40, game.clientHeight-80));
+      ob.style.bottom = h + 'px';
+      ob.style.right='-80px';
+      ob.style.fontSize = (38 + Math.floor(rand(-4, 10))) + 'px';
+      game.appendChild(ob);
+      obstacles.add(ob);
+    }
+
+    let spawnTimer = 0;
+
+    function reset(){
+      obstacles.forEach(o=>o.remove());
+      obstacles.clear();
+      y = game.clientHeight*0.45; vy = 0; speed = 4.6; meters = 0; spawnTimer = 0;
+      bf.style.bottom = y + 'px';
+      bf.classList.remove('flap');
+      updateHUD();
+    }
+
+    function updateHUD(){
+      scoreEl.textContent = `Score: ${Math.floor(meters)}`;
+      speedEl.textContent = `Wind: ${(speed/4.6).toFixed(1)}x`;
+    }
+
+    function flap(){
+      if(!running) return;
+      vy = flapV;
+      bf.classList.remove('flap'); void bf.offsetWidth; bf.classList.add('flap');
+    }
+
+    function rect(el){
+      const r = el.getBoundingClientRect();
+      return {x:r.left, y:r.top, w:r.width, h:r.height};
+    }
+
+    function collide(a,b,pad=6){
+      return !(a.x+a.w < b.x+pad || a.x+pad > b.x+b.w || a.y+a.h < b.y+pad || a.y+pad > b.y+b.h);
+    }
+
+    function loop(t){
+      rafId = requestAnimationFrame(loop);
+      const dt = Math.min(32, t - last || 16);
+      last = t;
+
+      // physics
+      vy -= gravity; y += vy;
+      const floor = 20, ceil = game.clientHeight - 20 - 44; // 44 ~ size
+      if(y < floor){ y = floor; vy = 0; }
+      if(y > ceil){ y = ceil; vy = 0; }
+      bf.style.bottom = y + 'px';
+
+      // spawns
+      spawnTimer -= dt;
+      if(spawnTimer <= 0){
+        spawnObstacle();
+        const gap = Math.max(420, 980 - speed*80);
+        spawnTimer = rand(gap*0.6, gap);
+      }
+
+      // move & cleanup
+      obstacles.forEach(ob=>{
+        const x = parseFloat(ob.style.right);
+        ob.style.right = (x + speed) + 'px';
+        if(x > game.clientWidth + 120){ obstacles.delete(ob); ob.remove(); meters += 1; }
+      });
+
+      // difficulty
+      meters += dt * 0.004;
+      speed += dt * 0.0005;
+      updateHUD();
+
+      // collisions
+      const p = rect(bf);
+      for(const ob of obstacles){
+        if(collide(p, rect(ob))){ gameOver(); return; }
+      }
+    }
+
+    function start(){
+      reset();
+      startOverlay.classList.add('hidden');
+      overOverlay.classList.add('hidden');
+      running = true; last = 0;
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(loop);
+    }
+
+    function gameOver(){
+      running = false;
+      cancelAnimationFrame(rafId);
+      const sc = Math.floor(meters);
+      finalScoreEl.textContent = sc;
+      if(sc > best){ best = sc; localStorage.setItem('butterfly-best', best); }
+      bestEl.textContent = `Best: ${best}`;
+      overOverlay.classList.remove('hidden');
+    }
+
+    function restart(){ start(); }
+
+    // controls
+    window.addEventListener('keydown', e=>{
+      if(e.code==='Space' || e.code==='ArrowUp'){ e.preventDefault(); flap(); }
+      if(e.code==='KeyR'){ restart(); }
+    });
+    game.addEventListener('pointerdown', flap);
+
+    btnStart.addEventListener('click', start);
+    btnRestart.addEventListener('click', restart);
+  </script>
+</body>
+</html>
