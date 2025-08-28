@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>The Impossible Quiz - Simple Version</title>
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      text-align: center;
+      margin: 0;
+      padding: 0;
+      background-color: #f4f4f4;
+    }
+    #game {
+      max-width: 600px;
+      margin: 100px auto;
+      background: white;
+      padding: 20px;
+      box-shadow: 0 0 10px #aaa;
+      border-radius: 10px;
+    }
+    .question {
+      font-size: 24px;
+      margin-bottom: 20px;
+    }
+    .answers button {
+      display: block;
+      margin: 10px auto;
+      padding: 10px 20px;
+      font-size: 18px;
+      cursor: pointer;
+    }
+    #message {
+      font-weight: bold;
+      color: red;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div id="game">
+    <div class="question" id="question">Loading question...</div>
+    <div class="answers" id="answers"></div>
+    <div id="message"></div>
+  </div>
+
+  <script>
+    const questions = [
+      {
+        q: "What is 2 + 2?",
+        answers: ["4", "fish", "22", "window"],
+        correct: 1  // "fish" is the joke answer
+      },
+      {
+        q: "Which button is correct?",
+        answers: ["This one", "That one", "Nope", "Definitely not"],
+        correct: 2  // "Nope"
+      },
+      {
+        q: "Click the correct answer.",
+        answers: ["Correct answer", "Wrong", "Don't click me", "Still wrong"],
+        correct: 0
+      },
+      {
+        q: "What color is a mirror?",
+        answers: ["Silver", "Invisible", "All colors", "None of the above"],
+        correct: 2
+      }
+    ];
+
+    let currentQuestion = 0;
+
+    function loadQuestion() {
+      if (currentQuestion >= questions.length) {
+        document.getElementById("game").innerHTML = "<h2>You beat the impossible quiz! 🎉</h2>";
+        return;
+      }
+
+      const q = questions[currentQuestion];
+      document.getElementById("question").textContent = q.q;
+      const answersDiv = document.getElementById("answers");
+      answersDiv.innerHTML = "";
+
+      q.answers.forEach((answer, idx) => {
+        const btn = document.createElement("button");
+        btn.textContent = answer;
+        btn.onclick = () => handleAnswer(idx);
+        answersDiv.appendChild(btn);
+      });
+
+      document.getElementById("message").textContent = "";
+    }
+
+    function handleAnswer(index) {
+      const correct = questions[currentQuestion].correct;
+      if (index === correct) {
+        currentQuestion++;
+        loadQuestion();
+      } else {
+        document.getElementById("message").textContent = "Wrong! Starting over...";
+        currentQuestion = 0;
+        setTimeout(loadQuestion, 1500);
+      }
+    }
+
+    loadQuestion();
+  </script>
+</body>
+</html>
